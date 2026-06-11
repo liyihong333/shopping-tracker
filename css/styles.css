@@ -410,6 +410,19 @@ html, body {
   background: linear-gradient(135deg, #fffbeb 0%, #ffffff 40%);
 }
 
+.item-card--depleted {
+  opacity: 0.72;
+  background: var(--bg);
+}
+
+.item-card--depleted .qty-number {
+  color: var(--text-tertiary);
+}
+
+.section-title--muted {
+  margin-top: 28px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -641,6 +654,32 @@ html, body {
   box-shadow: 0 2px 8px rgba(28, 25, 23, 0.12);
 }
 
+/* ── Data Backup ── */
+.backup-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.backup-hint {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.backup-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.backup-actions .btn {
+  width: 100%;
+}
+
 /* ── Stats ── */
 .stat-grid {
   display: grid;
@@ -774,6 +813,10 @@ html, body {
 
 .history-type.consume {
   background: var(--danger-soft);
+}
+
+.history-type.adjust {
+  background: var(--primary-soft);
 }
 
 .history-info {

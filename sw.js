@@ -1,4 +1,4 @@
-const CACHE = 'shopping-tracker-v3';
+const CACHE = 'shopping-tracker-v4';
 
 const PRECACHE = [
   './icons/icon-192.png',

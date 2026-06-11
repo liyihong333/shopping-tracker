@@ -98,7 +98,7 @@ function renderInventory() {
               <div class="item-info">
                 <div class="item-name">${esc(item.name)}</div>
                 <div class="item-meta">
-                  ${item.sources.join('、')}
+                  ${item.sources.map(esc).join('、')}
                   ${low ? '<span class="badge badge-warning">库存偏低</span>' : ''}
                 </div>
               </div>
@@ -110,6 +110,29 @@ function renderInventory() {
         });
       html += `</div>`;
     });
+  }
+
+  const depleted = loadItems().filter((i) => i.quantity <= 0);
+  if (depleted.length > 0) {
+    html += `<div class="section-title section-title--muted">已耗尽 (${depleted.length})</div><div class="item-list item-list--depleted">`;
+    depleted
+      .sort((a, b) => (b.depletedAt || '').localeCompare(a.depletedAt || ''))
+      .forEach((item, idx) => {
+        const catInfo = CATEGORIES[item.category];
+        html += `
+          <div class="item-card item-card--depleted" data-id="${item.id}" style="animation-delay:${idx * 40}ms">
+            <div class="item-icon" style="background:${catInfo.color}18">${catInfo.icon}</div>
+            <div class="item-info">
+              <div class="item-name">${esc(item.name)}</div>
+              <div class="item-meta">${item.depletedAt ? `耗尽于 ${item.depletedAt}` : '已耗尽'}</div>
+            </div>
+            <div class="item-qty">
+              <div class="qty-number">0</div>
+              <div class="qty-unit">${esc(item.unit)}</div>
+            </div>
+          </div>`;
+      });
+    html += `</div>`;
   }
 
   $('#main-content').innerHTML = html;
@@ -136,12 +159,19 @@ function showItemDetail(id) {
     .slice(0, 10)
     .map((h) => {
       const isPurchase = h.type === 'purchase';
+      const isAdjust = h.type === 'adjust';
+      const icon = isPurchase ? '🛒' : isAdjust ? '✏️' : '📤';
+      const label = isPurchase
+        ? `购买 ${h.amount} ${item.unit}`
+        : isAdjust
+          ? `调整 ${h.previousAmount} → ${h.amount} ${item.unit}`
+          : `消耗 ${h.amount} ${item.unit}`;
       return `
         <div class="history-item">
-          <div class="history-type ${h.type}">${isPurchase ? '🛒' : '📤'}</div>
+          <div class="history-type ${h.type}">${icon}</div>
           <div class="history-info">
-            <div class="history-name">${isPurchase ? '购买' : '消耗'} ${h.amount} ${item.unit}</div>
-            <div class="history-detail">${h.source || h.note || ''}</div>
+            <div class="history-name">${label}</div>
+            <div class="history-detail">${esc(h.source || h.note || '')}</div>
           </div>
           <div class="history-date">${h.date}</div>
         </div>`;
@@ -157,7 +187,7 @@ function showItemDetail(id) {
       <div class="item-icon" style="background:${cat.color}18">${cat.icon}</div>
       <div class="item-info">
         <div class="item-name">${cat.label}</div>
-        <div class="item-meta">${item.sources.join('、')}</div>
+        <div class="item-meta">${item.sources.map(esc).join('、')}</div>
       </div>
       <div class="item-qty">
         <div class="qty-number">${item.quantity}</div>
@@ -187,7 +217,11 @@ function showItemDetail(id) {
   $('#btn-edit-item').addEventListener('click', () => showEditItem(id));
   $('#btn-delete-item').addEventListener('click', () => {
     if (confirm(`确定删除「${item.name}」及其所有记录？`)) {
-      deleteItem(id);
+      const result = deleteItem(id);
+      if (result && result.error) {
+        showToast(result.error);
+        return;
+      }
       closeModal();
       render();
       showToast('已删除');
@@ -227,11 +261,15 @@ function showEditItem(id) {
   $('#edit-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    updateItem(id, {
+    const result = updateItem(id, {
       name: fd.get('name').trim(),
       quantity: parseFloat(fd.get('quantity')),
       minStock: parseFloat(fd.get('minStock')) || 0,
     });
+    if (result && result.error) {
+      showToast(result.error);
+      return;
+    }
     closeModal();
     render();
     showToast('已保存');
@@ -372,7 +410,7 @@ function bindRecordEvents() {
       const cat = document.querySelector('#cat-chips .chip.selected');
       const source = document.querySelector('#source-chips .chip.selected');
 
-      addPurchase({
+      const result = addPurchase({
         name: fd.get('name').trim(),
         category: cat.dataset.cat,
         quantity: parseFloat(fd.get('quantity')),
@@ -383,10 +421,21 @@ function bindRecordEvents() {
         note: fd.get('note').trim(),
       });
 
+      if (result && result.error) {
+        showToast(result.error);
+        return;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
       e.target.reset();
-      document.querySelector('#cat-chips .chip').classList.add('selected');
-      document.querySelector('#source-chips .chip').classList.add('selected');
-      fd.set('date', new Date().toISOString().slice(0, 10));
+      const dateInput = e.target.querySelector('[name="date"]');
+      if (dateInput) dateInput.value = today;
+      document.querySelectorAll('#cat-chips .chip').forEach((c, i) => {
+        c.classList.toggle('selected', i === 0);
+      });
+      document.querySelectorAll('#source-chips .chip').forEach((c, i) => {
+        c.classList.toggle('selected', i === 0);
+      });
       showToast('已入库 ✓');
     });
   }
@@ -403,7 +452,7 @@ function bindRecordEvents() {
       }
       e.target.reset();
       renderRecord();
-      showToast('已记录消耗');
+      showToast(result.quantity <= 0 ? '已记录消耗，该物品已耗尽' : '已记录消耗');
     });
   }
 }
@@ -474,7 +523,51 @@ function renderStats() {
     html += `</div>`;
   }
 
+  html += `
+    <div class="section-title">数据备份</div>
+    <div class="backup-card">
+      <p class="backup-hint">导出 JSON 备份，换机或清缓存后可恢复数据</p>
+      <div class="backup-actions">
+        <button type="button" class="btn btn-secondary" id="btn-export">导出备份</button>
+        <button type="button" class="btn btn-secondary" id="btn-import">导入备份</button>
+        <input type="file" id="import-file" accept=".json,application/json" class="hidden" />
+      </div>
+    </div>`;
+
   $('#main-content').innerHTML = html;
+
+  $('#btn-export')?.addEventListener('click', () => {
+    const blob = new Blob([exportData()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `shopping-tracker-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('已导出备份');
+  });
+
+  $('#btn-import')?.addEventListener('click', () => $('#import-file')?.click());
+
+  $('#import-file')?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const count = loadItems().length;
+      if (!confirm(`导入将覆盖当前 ${count} 条记录，确定继续？`)) return;
+
+      const result = importData(reader.result);
+      if (result.error) {
+        showToast(result.error);
+        return;
+      }
+      render();
+      showToast(`已导入 ${result.count} 条记录`);
+    };
+    reader.readAsText(file);
+  });
 }
 
 function esc(str) {
