@@ -20,8 +20,16 @@ function showToast(msg) {
 }
 
 function openModal(html) {
-  $('#modal').innerHTML = html;
+  $('#modal').innerHTML = `<div class="modal-handle"></div>${html}`;
   $('#modal-overlay').classList.remove('hidden');
+}
+
+function updateHeaderDate() {
+  const el = $('#header-date');
+  if (!el) return;
+  const now = new Date();
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  el.textContent = `${now.getMonth() + 1}月${now.getDate()}日 · ${weekdays[now.getDay()]}`;
 }
 
 function closeModal() {
@@ -34,13 +42,26 @@ function renderInventory() {
     inventoryFilter === 'all'
       ? items
       : items.filter((i) => i.category === inventoryFilter);
+  const lowCount = items.filter((i) => i.minStock > 0 && i.quantity <= i.minStock).length;
 
   const tabs = [
     { id: 'all', label: '全部' },
     ...Object.values(CATEGORIES),
   ];
 
-  let html = `<div class="category-tabs">`;
+  let html = `
+    <div class="summary-row">
+      <div class="summary-card" style="--card-accent: var(--accent)">
+        <div class="summary-value">${items.length}</div>
+        <div class="summary-label">在库种类</div>
+      </div>
+      <div class="summary-card ${lowCount > 0 ? 'summary-card--warn' : ''}">
+        <div class="summary-value">${lowCount}</div>
+        <div class="summary-label">库存偏低</div>
+      </div>
+    </div>`;
+
+  html += `<div class="category-tabs">`;
   tabs.forEach((t) => {
     const id = t.id;
     const label = t.label || t.label;
@@ -66,13 +87,13 @@ function renderInventory() {
     Object.keys(CATEGORIES).forEach((cat) => {
       if (!grouped[cat]) return;
       const catInfo = CATEGORIES[cat];
-      html += `<div class="section-title">${catInfo.icon} ${catInfo.label}</div>`;
+      html += `<div class="section-title">${catInfo.icon} ${catInfo.label}</div><div class="item-list">`;
       grouped[cat]
         .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
-        .forEach((item) => {
+        .forEach((item, idx) => {
           const low = item.minStock > 0 && item.quantity <= item.minStock;
           html += `
-            <div class="item-card ${low ? 'low-stock' : ''}" data-id="${item.id}">
+            <div class="item-card ${low ? 'low-stock' : ''}" data-id="${item.id}" style="animation-delay:${idx * 40}ms">
               <div class="item-icon" style="background:${catInfo.color}18">${catInfo.icon}</div>
               <div class="item-info">
                 <div class="item-name">${esc(item.name)}</div>
@@ -87,6 +108,7 @@ function renderInventory() {
               </div>
             </div>`;
         });
+      html += `</div>`;
     });
   }
 
@@ -148,7 +170,7 @@ function showItemDetail(id) {
       <button class="btn btn-danger btn-sm" id="btn-delete-item">删除</button>
     </div>
     <div class="section-title">最近记录</div>
-    ${historyHtml || '<p style="color:var(--text-secondary);font-size:0.85rem">暂无记录</p>'}
+    ${historyHtml ? `<div class="history-list">${historyHtml}</div>` : '<p style="color:var(--text-secondary);font-size:0.85rem">暂无记录</p>'}
   `);
 
   $('#modal-close').addEventListener('click', closeModal);
@@ -419,12 +441,12 @@ function renderStats() {
     const pct = Math.round((data.count / maxCount) * 100);
     html += `
       <div class="stat-cat-card">
-        <div class="item-icon" style="background:${cat.color}18;width:36px;height:36px;font-size:1.1rem">${cat.icon}</div>
-        <div style="flex:1">
-          <div style="font-size:0.88rem;font-weight:600">${cat.label}</div>
-          <div style="font-size:0.75rem;color:var(--text-secondary)">${data.count} 种 · 共 ${data.totalQty} 件</div>
-          <div class="stat-cat-bar" style="margin-top:6px">
-            <div class="stat-cat-fill" style="width:${pct}%;background:${cat.color}"></div>
+        <div class="item-icon" style="background:${cat.color}14;width:40px;height:40px;font-size:1.1rem">${cat.icon}</div>
+        <div class="stat-cat-info">
+          <div class="stat-cat-name">${cat.label}</div>
+          <div class="stat-cat-meta">${data.count} 种 · 共 ${data.totalQty} 件</div>
+          <div class="stat-cat-bar">
+            <div class="stat-cat-fill" style="width:${pct}%;background:linear-gradient(90deg,${cat.color},${cat.color}88)"></div>
           </div>
         </div>
       </div>`;
@@ -435,11 +457,12 @@ function renderStats() {
   if (recentHistory.length === 0) {
     html += `<div class="empty-state" style="padding:24px"><p>暂无记录</p></div>`;
   } else {
-    recentHistory.forEach((h) => {
+    html += `<div class="history-list">`;
+    recentHistory.forEach((h, idx) => {
       const isPurchase = h.type === 'purchase';
       const cat = CATEGORIES[h.category];
       html += `
-        <div class="history-item">
+        <div class="history-item" style="animation-delay:${idx * 35}ms">
           <div class="history-type ${h.type}">${isPurchase ? '🛒' : '📤'}</div>
           <div class="history-info">
             <div class="history-name">${esc(h.itemName)} ${isPurchase ? '+' : '-'}${h.amount} ${h.unit}</div>
@@ -448,6 +471,7 @@ function renderStats() {
           <div class="history-date">${h.date}</div>
         </div>`;
     });
+    html += `</div>`;
   }
 
   $('#main-content').innerHTML = html;
@@ -490,4 +514,5 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
+updateHeaderDate();
 navigate('inventory');

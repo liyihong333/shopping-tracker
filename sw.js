@@ -1,4 +1,4 @@
-const CACHE = 'shopping-tracker-v1';
+const CACHE = 'shopping-tracker-v2';
 const ASSETS = [
   './',
   './index.html',
